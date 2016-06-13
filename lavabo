@@ -30,21 +30,7 @@ import time
 from ConfigParser import ConfigParser
 import argcomplete
 
-def send_message(cmd, user, hostname, port, board=None):
-    ssh = subprocess.Popen(("ssh %s@%s -p %d interact" % (user, hostname, port)).split(), stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-
-    if cmd in ["list", "update"]:
-        msg = json.dumps({cmd: ""})
-    else:
-        msg = json.dumps({cmd: {"board": board}})
-
-    ssh.stdin.write(msg)
-    ssh.stdin.flush()
-    answer = ssh.stdout.readline()
-    ssh.terminate()
-    return answer
-
-def boardCompleter(prefix, parsed_args, **kwargs):
+def board_completer(prefix, parsed_args, **kwargs):
     config_parser = ConfigParser()
     config_parser.readfp(open(parsed_args.conf_file))
     hostname = config_parser.get("lavabo-server", "hostname")
@@ -69,38 +55,39 @@ subparsers = parser.add_subparsers(dest='cmd', help="subcommands help")
 parser_list = subparsers.add_parser("list", description="List all boards available in LAVA.", help="list available boards")
 
 parser_power_off = subparsers.add_parser("power-off", description="Power board off.", help="power board off.")
-parser_power_off.add_argument("BOARD", nargs="?", default=os.environ.get("LAVABO_BOARD", None), help="hostname of the board to power off. If omitted, gotten from LAVABO_BOARD environment variable.").completer = boardCompleter
+parser_power_off.add_argument("BOARD", nargs="?", default=os.environ.get("LAVABO_BOARD", None), help="hostname of the board to power off. If omitted, gotten from LAVABO_BOARD environment variable.").completer = board_completer
 
 parser_power_reset = subparsers.add_parser("reset", description="Reset board's power.", help="reset board's power.")
-parser_power_reset.add_argument("BOARD", nargs="?", default=os.environ.get("LAVABO_BOARD", None), help="hostname of the board to reset. If omitted, gotten from LAVABO_BOARD environment variable.").completer = boardCompleter
+parser_power_reset.add_argument("BOARD", nargs="?", default=os.environ.get("LAVABO_BOARD", None), help="hostname of the board to reset. If omitted, gotten from LAVABO_BOARD environment variable.").completer = board_completer
 
 parser_release = subparsers.add_parser("release", description="Release the board and put it online in LAVA if possible.", help="release the board and put it online in LAVA if possible.")
-parser_release.add_argument("BOARD", nargs="?", default=os.environ.get("LAVABO_BOARD", None), help="hostname of the board to put online. If omitted, gotten from LAVABO_BOARD environment variable.").completer = boardCompleter
+parser_release.add_argument("BOARD", nargs="?", default=os.environ.get("LAVABO_BOARD", None), help="hostname of the board to put online. If omitted, gotten from LAVABO_BOARD environment variable.").completer = board_completer
 
 parser_reserve = subparsers.add_parser("reserve", description="Reserve board and put it offline in LAVA if needed.", help="reserve board and put it offline in LAVA if needed.")
-parser_reserve.add_argument("BOARD", nargs="?", default=os.environ.get("LAVABO_BOARD", None), help="hostname of the board to put offline. If omitted, gotten from LAVABO_BOARD environment variable.").completer = boardCompleter
+parser_reserve.add_argument("BOARD", nargs="?", default=os.environ.get("LAVABO_BOARD", None), help="hostname of the board to put offline. If omitted, gotten from LAVABO_BOARD environment variable.").completer = board_completer
 
 parser_serial = subparsers.add_parser("serial", description="Redirect port on lavabo-server to localhost to get serial connection.", help="redirect port on lavabo-server to localhost to get serial connection.")
-parser_serial.add_argument("BOARD", nargs="?", default=os.environ.get("LAVABO_BOARD", None), help="hostname of the board to get serial connection from. If omitted, gotten from LAVABO_BOARD environment variable.").completer = boardCompleter
+parser_serial.add_argument("BOARD", nargs="?", default=os.environ.get("LAVABO_BOARD", None), help="hostname of the board to get serial connection from. If omitted, gotten from LAVABO_BOARD environment variable.").completer = board_completer
 
 parser_status = subparsers.add_parser("status", description="Get board status.", help="get board status.")
-parser_status.add_argument("BOARD", nargs="?", default=os.environ.get("LAVABO_BOARD", None), help="hostname of the board whose status is requested. If omitted, gotten from LAVABO_BOARD environment variable.").completer = boardCompleter
+parser_status.add_argument("BOARD", nargs="?", default=os.environ.get("LAVABO_BOARD", None), help="hostname of the board whose status is requested. If omitted, gotten from LAVABO_BOARD environment variable.").completer = board_completer
 
 parser_upload = subparsers.add_parser("upload", description="Send files to lavabo-server.", help="send files to lavabo-server.")
 parser_upload.add_argument("FILES", nargs="+", help="full path of the files to send. You can rename the files after being uploaded by separating local filenames and remote filenames with a colon (:). e.g.: upload file1:file2 file2:file3 will upload file1 and file2 and respectively rename them file2 and file3 on lavabo-server.")
 
-argcomplete.autocomplete(parser)
-args = parser.parse_args()
+def send_message(cmd, user, hostname, port, board=None):
+    ssh = subprocess.Popen(("ssh %s@%s -p %d interact" % (user, hostname, port)).split(), stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
-config_parser = ConfigParser()
-config_parser.readfp(args.conf_file)
-hostname = config_parser.get("lavabo-server", "hostname")
-user = config_parser.get("lavabo-server", "user")
-port = config_parser.getint("lavabo-server", "port")
+    if cmd in ["list", "update"]:
+        msg = json.dumps({cmd: ""})
+    else:
+        msg = json.dumps({cmd: {"board": board}})
 
-if args.cmd not in ["upload", "list"] and args.BOARD is None:
-    print "No board specified. Please add board in LAVABO_BOARD environment variable or as an argument to the command."
-    sys.exit(1)
+    ssh.stdin.write(msg)
+    ssh.stdin.flush()
+    answer = ssh.stdout.readline()
+    ssh.terminate()
+    return answer
 
 def get_available_port():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -130,6 +117,19 @@ def pkey_connect(transport):
             break
         except paramiko.SSHException:
             pass
+
+argcomplete.autocomplete(parser)
+args = parser.parse_args()
+
+config_parser = ConfigParser()
+config_parser.readfp(args.conf_file)
+hostname = config_parser.get("lavabo-server", "hostname")
+user = config_parser.get("lavabo-server", "user")
+port = config_parser.getint("lavabo-server", "port")
+
+if args.cmd not in ["upload", "list"] and args.BOARD is None:
+    print "No board specified. Please add board in LAVABO_BOARD environment variable or as an argument to the command."
+    sys.exit(1)
 
 if args.cmd == "upload":
     hkey = get_hostkey()
